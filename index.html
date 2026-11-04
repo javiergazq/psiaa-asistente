@@ -1,0 +1,1055 @@
+<meta charset="utf-8">
+<title>PSIAA · Asistente del programa</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="El Programa de Salud Infantil y Adolescente de Andalucía, en una conversación.">
+
+<style>
+  /* ---------------------------------------------------------------- tokens
+     El tema del visor tiene TRES estados: claro explícito, oscuro explícito y
+     "sistema", que no estampa nada. Por eso la paleta clara completa vive en
+     :root a secas y los bloques siguientes solo redefinen tokens. Ningún color
+     se declara únicamente dentro de una media query. */
+  :root {
+    --ground:        #fbfbfa;
+    --surface:       #ffffff;
+    --surface-sunk:  #f3f6f4;
+    --ink:           #141d1a;   /* casi negro con sesgo verde: escogido, no heredado */
+    --ink-soft:      #46584f;
+    --ink-faint:     #7c8d85;
+    --line:          #e3e7e4;
+    --line-strong:   #ccd4cf;
+    --accent:        #0e6b5a;
+    --accent-ink:    #0a4e41;
+    --accent-wash:   #e6f1ed;
+    --accent-glow:   rgb(14 107 90 / .13);
+    --flag:          #8a5a12;   /* semántico: espera, sin información */
+    --flag-wash:     #fbf3e4;
+
+    --sans: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto,
+            "Helvetica Neue", sans-serif;
+    --serif: "Iowan Old Style", Georgia, "Palatino Linotype", ui-serif, serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 46rem;
+    --radius: 14px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:       #0e1413;
+      --surface:      #161f1d;
+      --surface-sunk: #111917;
+      --ink:          #e8efeb;
+      --ink-soft:     #a6b8b1;
+      --ink-faint:    #798d85;
+      --line:         #263130;
+      --line-strong:  #394742;
+      --accent:       #55cfb3;
+      --accent-ink:   #92e3d0;
+      --accent-wash:  #16302b;
+      --accent-glow:  rgb(85 207 179 / .16);
+      --flag:         #e0ad60;
+      --flag-wash:    #2b2317;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:       #0e1413;
+    --surface:      #161f1d;
+    --surface-sunk: #111917;
+    --ink:          #e8efeb;
+    --ink-soft:     #a6b8b1;
+    --ink-faint:    #798d85;
+    --line:         #263130;
+    --line-strong:  #394742;
+    --accent:       #55cfb3;
+    --accent-ink:   #92e3d0;
+    --accent-wash:  #16302b;
+    --accent-glow:  rgb(85 207 179 / .16);
+    --flag:         #e0ad60;
+    --flag-wash:    #2b2317;
+  }
+
+  /* ---------------------------------------------------------------- base */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--ground);     /* explícito: un body transparente toma el
+                                      fondo del host y rompe el tema */
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-delay: 0ms !important;
+      transition-duration: .01ms !important;
+    }
+  }
+
+  /* ------------------------------------------------------------- logotipo
+     La sigla del programa ya contiene "IA" dentro: PS-IA-A. Resaltarla es el
+     único logotipo que este proyecto podía tener, así que el peso del diseño
+     va aquí. Sans compacta y muy apretada: wordmark de producto, no titular
+     de documento. */
+  .logo {
+    font-family: var(--sans);
+    font-weight: 800;
+    letter-spacing: -.055em;
+    line-height: .95;
+    margin: 0;
+    color: var(--ink);
+    font-feature-settings: "ss01";
+  }
+
+  .logo i {
+    font-style: normal;
+    color: var(--accent);
+    position: relative;
+  }
+
+  /* El subrayado del acento se dibuja, no se hereda: así puede crecer en la
+     entrada sin arrastrar el resto del texto. */
+  .logo i::after {
+    content: "";
+    position: absolute;
+    left: -.02em;
+    right: -.02em;
+    bottom: .04em;
+    height: .09em;
+    background: var(--accent);
+    border-radius: 2px;
+    transform-origin: left center;
+    animation: trazo .5s .35s cubic-bezier(.2, .8, .2, 1) both;
+  }
+
+  @keyframes trazo {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+  }
+
+  /* ---------------------------------------------------------------- inicio */
+  .portada {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1.6rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+    animation: entra .5s cubic-bezier(.2, .8, .2, 1) both;
+  }
+
+  @keyframes entra {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .portada .logo { font-size: clamp(3.2rem, 13vw, 5.5rem); }
+
+  .lema {
+    font-family: var(--serif);
+    font-size: clamp(1.05rem, 3.4vw, 1.3rem);
+    line-height: 1.45;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin: -.6rem 0 0;
+    max-width: 30ch;
+    text-wrap: balance;
+  }
+
+  /* ------------------------------------------------------------ sugerencias */
+  .sugerencias {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .5rem;
+    max-width: 38rem;
+  }
+
+  .sugerencia {
+    font: inherit;
+    font-size: .875rem;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: .42rem .9rem;
+    cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s, transform .15s;
+  }
+
+  .sugerencia:hover {
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    background: var(--accent-wash);
+    transform: translateY(-1px);
+  }
+
+  .aclaracion {
+    font-size: .8rem;
+    line-height: 1.55;
+    color: var(--ink-faint);
+    margin: 0;
+    max-width: 36ch;
+  }
+
+  /* ----------------------------------------------------------- cabecera hilo */
+  header {
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: none;
+  }
+
+  body.conversando header { display: block; }
+
+  .barra {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding: .7rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+  }
+
+  .barra .logo { font-size: 1.35rem; }
+
+  .barra .logo i::after { animation: none; }
+
+  .reiniciar {
+    font: inherit;
+    font-size: .8rem;
+    color: var(--ink-faint);
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: .25rem .75rem;
+    margin-left: auto;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+
+  .reiniciar:hover { color: var(--accent-ink); border-color: var(--accent); }
+
+  /* ---------------------------------------------------------------- hilo */
+  main { display: none; }
+
+  body.conversando main {
+    display: block;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.75rem 1.25rem 2rem;
+  }
+
+  body.conversando .portada { display: none; }
+
+  .hilo {
+    max-width: var(--measure);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .turno { display: flex; flex-direction: column; gap: .55rem; }
+
+  .pregunta {
+    font-family: var(--serif);
+    font-size: 1.22rem;
+    line-height: 1.4;
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  .quien {
+    font-family: var(--mono);
+    font-size: .64rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--ink-faint);
+  }
+
+  /* ---------------------------------------------------------------- aviso demo */
+  .demo {
+    max-width: var(--measure);
+    margin: 0 auto 1.5rem;
+    padding: .7rem .9rem;
+    background: var(--flag-wash);
+    border: 1px solid var(--flag);
+    border-radius: var(--radius);
+    font-size: .82rem;
+    display: none;
+  }
+
+  .demo strong { color: var(--flag); }
+  body.es-demo.conversando .demo { display: block; }
+
+  /* ---------------------------------------------------------------- respuesta */
+  .cuerpo > *:first-child { margin-top: 0; }
+  .cuerpo > *:last-child { margin-bottom: 0; }
+
+  .cuerpo h2, .cuerpo h3, .cuerpo h4 {
+    font-weight: 650;
+    line-height: 1.3;
+    margin: 1.5rem 0 .45rem;
+    text-wrap: balance;
+  }
+
+  .cuerpo h2 { font-size: 1.06rem; }
+  .cuerpo h3 { font-size: .99rem; }
+  .cuerpo h4 { font-size: .93rem; color: var(--ink-soft); }
+
+  .cuerpo p, .cuerpo li { text-wrap: pretty; }
+  .cuerpo p { margin: .7rem 0; }
+  .cuerpo ul, .cuerpo ol { margin: .6rem 0; padding-left: 1.35rem; }
+  .cuerpo li { margin: .3rem 0; }
+  .cuerpo li::marker { color: var(--accent); }
+  .cuerpo strong { font-weight: 650; }
+
+  .cuerpo code {
+    font-family: var(--mono);
+    font-size: .85em;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: .08em .32em;
+  }
+
+  .cuerpo hr { border: 0; border-top: 1px solid var(--line); margin: 1.4rem 0; }
+
+  .cuerpo blockquote {
+    margin: .9rem 0;
+    padding: .1rem 0 .1rem .9rem;
+    border-left: 2px solid var(--line-strong);
+    color: var(--ink-soft);
+  }
+
+  .cuerpo a { color: var(--accent-ink); text-decoration-thickness: 1px; }
+
+  /* El programa está lleno de tablas por franja de edad: aquí son contenido
+     central, no un caso raro. Scroll propio para no empujar la página. */
+  .tabla-env {
+    overflow-x: auto;
+    margin: .95rem 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .cuerpo table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .86rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cuerpo th, .cuerpo td {
+    text-align: left;
+    padding: .45rem .75rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  .cuerpo thead th {
+    font-family: var(--mono);
+    font-size: .69rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-faint);
+    font-weight: 500;
+    background: var(--surface-sunk);
+  }
+
+  .cuerpo tbody tr:last-child td { border-bottom: 0; }
+
+  /* La cita es el producto: siempre visible, nunca ruidosa. */
+  .cita {
+    font-family: var(--mono);
+    font-size: .73em;
+    color: var(--accent-ink);
+    background: var(--accent-wash);
+    border-radius: 5px;
+    padding: .1em .36em;
+    white-space: nowrap;
+  }
+
+  /* ------------------------------------------------------- panel de fuentes */
+  .fuentes {
+    margin-top: 1.3rem;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: .85rem 1rem;
+  }
+
+  .fuentes h4 {
+    font-family: var(--mono);
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .11em;
+    color: var(--ink-faint);
+    margin: 0 0 .6rem;
+    font-weight: 500;
+  }
+
+  .fuentes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+  .fuente { display: flex; flex-wrap: wrap; gap: .35rem .55rem; align-items: baseline; }
+  .fuente-tit { font-size: .85rem; line-height: 1.4; }
+
+  .edicion {
+    font-family: var(--mono);
+    font-size: .67rem;
+    color: var(--accent-ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: .05em .45em;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .archivo {
+    font-family: var(--mono);
+    font-size: .67rem;
+    color: var(--ink-faint);
+    word-break: break-all;
+  }
+
+  .recorte { margin: .6rem 0 0; font-size: .8rem; color: var(--flag); }
+
+  /* ---------------------------------------------------------------- estados */
+  .nota {
+    border: 1px solid var(--flag);
+    background: var(--flag-wash);
+    border-radius: var(--radius);
+    padding: .8rem .95rem;
+    font-size: .9rem;
+  }
+
+  .nota p { margin: .3rem 0; }
+  .nota p:first-child { margin-top: 0; }
+  .nota p:last-child { margin-bottom: 0; }
+
+  .trabajando {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    font-size: .85rem;
+    color: var(--ink-faint);
+  }
+
+  .punto {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    animation: latido 1.2s ease-in-out infinite;
+  }
+
+  @keyframes latido {
+    0%, 100% { opacity: .25; transform: scale(.75); }
+    50%      { opacity: 1;   transform: scale(1); }
+  }
+
+  /* ---------------------------------------------------------- compositor */
+  .zona-compositor {
+    width: 100%;
+    max-width: 38rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    align-items: center;
+  }
+
+  body.conversando .zona-compositor {
+    max-width: var(--measure);
+    padding: .9rem 1.25rem 1rem;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* La línea y el fondo van SOLO en el contenedor exterior: estando anidados,
+     ponerlos en los dos pintaba dos reglas de 1px una debajo de la otra. */
+  body.conversando #pie-compositor {
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+
+  .compositor {
+    width: 100%;
+    display: flex;
+    gap: .55rem;
+    align-items: flex-end;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    padding: .45rem .45rem .45rem .85rem;
+    transition: border-color .18s, box-shadow .18s;
+  }
+
+  .compositor:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+
+  textarea {
+    flex: 1;
+    font: inherit;
+    font-size: 1rem;
+    color: var(--ink);
+    background: none;
+    border: 0;
+    resize: none;
+    max-height: 9rem;
+    line-height: 1.5;
+    padding: .4rem 0;
+  }
+
+  textarea:focus { outline: none; }
+  textarea::placeholder { color: var(--ink-faint); }
+
+  .enviar {
+    flex: 0 0 auto;
+    width: 2.3rem;
+    height: 2.3rem;
+    display: grid;
+    place-items: center;
+    color: var(--surface);
+    background: var(--accent);
+    border: 0;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: filter .15s, opacity .15s;
+  }
+
+  .enviar svg { width: 1.05rem; height: 1.05rem; display: block; }
+  .enviar:hover:not(:disabled) { filter: brightness(1.12); }
+  .enviar:disabled { opacity: .35; cursor: default; }
+
+  .legal {
+    font-size: .72rem;
+    line-height: 1.5;
+    color: var(--ink-faint);
+    margin: 0;
+    text-align: center;
+  }
+
+  body.conversando .legal { text-align: left; }
+  .legal a { color: var(--ink-soft); }
+
+  @media (max-width: 560px) {
+    body.conversando main { padding: 1.1rem .9rem 1.4rem; }
+    .barra { padding: .6rem .9rem; }
+    body.conversando .zona-compositor { padding: .7rem .9rem .8rem; }
+    .cuerpo th, .cuerpo td { white-space: normal; min-width: 7rem; }
+    .portada { gap: 1.3rem; }
+  }
+</style>
+
+<header>
+  <div class="barra">
+    <p class="logo" aria-label="PSIAA">PS<i>IA</i>A</p>
+    <button class="reiniciar" id="reiniciar" type="button">Nueva consulta</button>
+  </div>
+</header>
+
+<main id="desplazable">
+  <div class="demo">
+    <strong>Modo demostración.</strong> Aquí no hay conexión con el servidor, así que
+    se muestran respuestas de ejemplo ya grabadas para revisar el diseño.
+  </div>
+  <div class="hilo" id="hilo"></div>
+</main>
+
+<section class="portada" id="portada">
+  <h1 class="logo" aria-label="PSIAA">PS<i>IA</i>A</h1>
+  <p class="lema">
+    El Programa de Salud Infantil y Adolescente de Andalucía, en una conversación.
+  </p>
+
+  <div class="zona-compositor" id="zona-compositor">
+    <form class="compositor" id="formulario">
+      <textarea id="entrada" rows="1" placeholder="¿Qué quieres consultar?"
+                aria-label="Tu pregunta"></textarea>
+      <button class="enviar" id="boton" type="submit" aria-label="Preguntar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+      </button>
+    </form>
+    <p class="legal" id="legal">
+      Responde con el programa en la mano y te dice de qué ficha y página sale cada
+      dato. No sustituye al criterio profesional ni al texto oficial.
+    </p>
+  </div>
+
+  <div class="sugerencias" id="sugerencias">
+    <button class="sugerencia">¿Qué se hace en la revisión de los 6 meses?</button>
+    <button class="sugerencia">¿A qué edades son las revisiones?</button>
+    <button class="sugerencia">Dosis de vitamina D para el raquitismo</button>
+    <button class="sugerencia">¿Cuándo se criba la displasia de cadera?</button>
+    <button class="sugerencia">Consejos para entregar a los 2 años</button>
+    <button class="sugerencia">Una dinámica para trabajar los límites en grupo</button>
+  </div>
+</section>
+
+<div id="pie-compositor"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  document.documentElement.lang = "es";
+
+  const hilo = document.getElementById("hilo");
+  const portada = document.getElementById("portada");
+  const zona = document.getElementById("zona-compositor");
+  const pie = document.getElementById("pie-compositor");
+  const form = document.getElementById("formulario");
+  const entrada = document.getElementById("entrada");
+  const boton = document.getElementById("boton");
+  const desplazable = document.getElementById("desplazable");
+  const legal = document.getElementById("legal");
+
+  let historial = [];
+  let ocupado = false;
+
+  /* ------------------------------------------------------------ markdown
+     Intérprete propio en vez de una librería: la CSP de las páginas publicadas
+     bloquea los CDN, y aquí solo hacen falta los bloques que el modelo produce
+     de verdad — encabezados, listas, negrita, código, reglas y TABLAS. */
+
+  const escapar = (s) => s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+
+  function enLinea(texto) {
+    let t = escapar(texto);
+    t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
+    t = t.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Cita del programa: [Título de la ficha, p.3]. No es un enlace markdown,
+    // así que se trata después para no pisarlos.
+    t = t.replace(/\[([^\]]*?p\.\s?[\d–-]+[^\]]*?)\]/g, '<span class="cita">$1</span>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+    return t;
+  }
+
+  const filaTabla = (l) =>
+    l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+
+  const esSeparador = (l) =>
+    /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(l) && l.includes("-");
+
+  function aHtml(md) {
+    const lineas = md.replace(/\r/g, "").split("\n");
+    const salida = [];
+    let i = 0;
+
+    while (i < lineas.length) {
+      const linea = lineas[i];
+      if (!linea.trim()) { i++; continue; }
+
+      if (/^\s*(---|\*\*\*|___)\s*$/.test(linea)) { salida.push("<hr>"); i++; continue; }
+
+      const enc = linea.match(/^(#{1,6})\s+(.*)$/);
+      if (enc) {
+        // El h1 es el logotipo, así que la respuesta empieza en h2. El modelo
+        // usa sobre todo "###", que debe caer en h3 y no en el nivel menor.
+        const n = Math.min(Math.max(enc[1].length, 2), 4);
+        salida.push(`<h${n}>${enLinea(enc[2])}</h${n}>`);
+        i++;
+        continue;
+      }
+
+      if (linea.includes("|") && i + 1 < lineas.length && esSeparador(lineas[i + 1])) {
+        const cab = filaTabla(linea);
+        i += 2;
+        const cuerpo = [];
+        while (i < lineas.length && lineas[i].includes("|") && lineas[i].trim()) {
+          cuerpo.push(filaTabla(lineas[i]));
+          i++;
+        }
+        const th = cab.map((c) => `<th>${enLinea(c)}</th>`).join("");
+        const tr = cuerpo.map(
+          (f) => `<tr>${f.map((c) => `<td>${enLinea(c)}</td>`).join("")}</tr>`
+        ).join("");
+        salida.push(`<div class="tabla-env"><table><thead><tr>${th}</tr></thead>` +
+                    `<tbody>${tr}</tbody></table></div>`);
+        continue;
+      }
+
+      if (/^\s*>\s?/.test(linea)) {
+        const trozos = [];
+        while (i < lineas.length && /^\s*>\s?/.test(lineas[i])) {
+          trozos.push(lineas[i].replace(/^\s*>\s?/, ""));
+          i++;
+        }
+        salida.push(`<blockquote>${aHtml(trozos.join("\n"))}</blockquote>`);
+        continue;
+      }
+
+      const puntos = linea.match(/^(\s*)([-*•]|\d+\.)\s+(.*)$/);
+      if (puntos) {
+        const ordenada = /\d/.test(puntos[2]);
+        const base = puntos[1].length;
+        const items = [];
+        while (i < lineas.length) {
+          const m = lineas[i].match(/^(\s*)([-*•]|\d+\.)\s+(.*)$/);
+          if (!m) break;
+          const sangria = m[1].length;
+          if (sangria < base) break;
+          if (sangria > base) {
+            const sub = [];
+            while (i < lineas.length) {
+              const s = lineas[i].match(/^(\s*)([-*•]|\d+\.)\s+(.*)$/);
+              if (!s || s[1].length <= base) break;
+              sub.push(lineas[i].slice(sangria));
+              i++;
+            }
+            if (items.length) items[items.length - 1] += aHtml(sub.join("\n"));
+            continue;
+          }
+          items.push(enLinea(m[3]));
+          i++;
+        }
+        const etq = ordenada ? "ol" : "ul";
+        salida.push(`<${etq}>${items.map((x) => `<li>${x}</li>`).join("")}</${etq}>`);
+        continue;
+      }
+
+      const parrafo = [];
+      while (i < lineas.length && lineas[i].trim() &&
+             !/^(#{1,6}\s|\s*>|\s*(-|\*|•|\d+\.)\s|\s*(---|\*\*\*|___)\s*$)/.test(lineas[i]) &&
+             !(lineas[i].includes("|") && i + 1 < lineas.length && esSeparador(lineas[i + 1]))) {
+        parrafo.push(lineas[i]);
+        i++;
+      }
+      if (parrafo.length) salida.push(`<p>${enLinea(parrafo.join(" "))}</p>`);
+      else i++;
+    }
+
+    return salida.join("");
+  }
+
+  /* ------------------------------------------------- separar cuerpo y fuentes
+     El motor cierra la respuesta con "---\n**Fichas consultadas**\n- …". Esa
+     parte va a un panel propio con la fecha de edición a la vista: saber de qué
+     versión del programa viene el dato importa. */
+
+  const MARCA_FUENTES = /\n+---\n+\*\*Fichas consultadas\*\*\n/;
+
+  function panelFuentes(bruto) {
+    const lineas = bruto.split("\n").map((l) => l.trim()).filter(Boolean);
+    const items = [], extras = [];
+
+    for (const l of lineas) {
+      const m = l.match(/^-\s+(.*?)\s+·\s+ed\.\s+(.*?)\s+·\s+`(.+?)`$/);
+      if (m) {
+        items.push(`<li class="fuente"><span class="fuente-tit">${escapar(m[1])}</span>` +
+                   `<span class="edicion">${escapar(m[2])}</span>` +
+                   `<span class="archivo">${escapar(m[3])}</span></li>`);
+      } else if (!/^-+$/.test(l)) {
+        extras.push(l);
+      }
+    }
+
+    let html = '<div class="fuentes"><h4>De dónde sale</h4>';
+    if (items.length) html += `<ul>${items.join("")}</ul>`;
+    if (extras.length) html += `<p class="recorte">${enLinea(extras.join(" "))}</p>`;
+    return html + "</div>";
+  }
+
+  function pintarRespuesta(nodo, texto) {
+    const corte = texto.search(MARCA_FUENTES);
+    if (corte === -1) { nodo.innerHTML = aHtml(texto); return; }
+    nodo.innerHTML = aHtml(texto.slice(0, corte)) +
+                     panelFuentes(texto.slice(corte).replace(MARCA_FUENTES, ""));
+  }
+
+  /* ------------------------------------------------------------- turnos */
+
+  function aConversacion() {
+    if (document.body.classList.contains("conversando")) return;
+    document.body.classList.add("conversando");
+    // Mueve el compositor al pie sin recrearlo: conserva los oyentes, el foco
+    // y lo que la persona estuviera escribiendo.
+    pie.appendChild(zona);
+    legal.textContent =
+      "Consulta documental, no asesoramiento clínico: verifica en la fuente citada " +
+      "antes de aplicar cualquier dato. No introduzcas datos de pacientes.";
+  }
+
+  function nuevoTurno(pregunta) {
+    const p = document.createElement("div");
+    p.className = "turno";
+    p.innerHTML = `<p class="quien">Tu pregunta</p>
+                   <p class="pregunta">${escapar(pregunta)}</p>`;
+    hilo.appendChild(p);
+
+    const r = document.createElement("div");
+    r.className = "turno";
+    r.innerHTML = '<p class="quien">Según el programa</p>' +
+                  '<div class="trabajando"><span class="punto"></span>Consultando el programa…</div>' +
+                  '<div class="cuerpo" aria-live="polite"></div>';
+    hilo.appendChild(r);
+
+    abajo();
+    return { estado: r.querySelector(".trabajando"), cuerpo: r.querySelector(".cuerpo") };
+  }
+
+  const abajo = () => { desplazable.scrollTop = desplazable.scrollHeight; };
+
+  function fijarOcupado(v) {
+    ocupado = v;
+    boton.disabled = v;
+  }
+
+  /* --------------------------------------------------------------- envío */
+
+  async function preguntar(texto) {
+    if (ocupado || !texto.trim()) return;
+    aConversacion();
+    fijarOcupado(true);
+    const { estado, cuerpo } = nuevoTurno(texto);
+    historial.push({ role: "user", content: texto });
+
+    let acumulado = "";
+    const pintar = () => {
+      estado.remove();
+      pintarRespuesta(cuerpo, acumulado);
+      abajo();
+    };
+
+    try {
+      const r = await fetch("/api/preguntar", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mensaje: texto, historial: historial.slice(0, -1) }),
+      });
+      if (!r.ok || !r.body) throw new Error("HTTP " + r.status);
+
+      const lector = r.body.getReader();
+      const dec = new TextDecoder();
+      let resto = "";
+
+      for (;;) {
+        const { value, done } = await lector.read();
+        if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const bloques = resto.split("\n\n");
+        resto = bloques.pop();
+
+        for (const bloque of bloques) {
+          const evento = (bloque.match(/^event:\s*(.+)$/m) || [])[1];
+          const datos = (bloque.match(/^data:\s*(.+)$/m) || [])[1];
+          if (!evento || !datos) continue;
+          let carga;
+          try { carga = JSON.parse(datos); } catch { continue; }
+          if (evento === "delta") { acumulado += carga.t; pintar(); }
+          else if (evento === "error") {
+            acumulado += (acumulado ? "\n\n" : "") + carga.t;
+            pintar();
+          }
+        }
+      }
+      if (!acumulado) throw new Error("respuesta vacía");
+      historial.push({ role: "assistant", content: acumulado });
+    } catch (e) {
+      document.body.classList.add("es-demo");
+      const grabada = DEMO[texto.trim()];
+      if (grabada) {
+        acumulado = grabada;
+        pintar();
+        historial.push({ role: "assistant", content: acumulado });
+      } else {
+        estado.remove();
+        cuerpo.innerHTML =
+          '<div class="nota"><p><strong>Sin conexión con el servidor.</strong></p>' +
+          "<p>Esta página necesita la función <code>/api/preguntar</code>, que solo " +
+          "existe una vez desplegada. Prueba una de las sugerencias de la portada " +
+          "para ver una respuesta grabada.</p></div>";
+      }
+    } finally {
+      fijarOcupado(false);
+    }
+  }
+
+  /* -------------------------------------------------------- interacciones */
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const t = entrada.value;
+    entrada.value = "";
+    entrada.style.height = "auto";
+    preguntar(t);
+  });
+
+  entrada.addEventListener("input", () => {
+    entrada.style.height = "auto";
+    entrada.style.height = Math.min(entrada.scrollHeight, 144) + "px";
+  });
+
+  entrada.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+  });
+
+  document.addEventListener("click", (e) => {
+    const s = e.target.closest(".sugerencia");
+    if (s) preguntar(s.textContent.trim());
+  });
+
+  document.getElementById("reiniciar").addEventListener("click", () => {
+    if (ocupado) return;
+    hilo.innerHTML = "";
+    historial = [];
+    document.body.classList.remove("conversando");
+    portada.insertBefore(zona, document.getElementById("sugerencias"));
+    legal.textContent =
+      "Responde con el programa en la mano y te dice de qué ficha y página sale " +
+      "cada dato. No sustituye al criterio profesional ni al texto oficial.";
+    entrada.focus();
+  });
+
+  /* ------------------------------------------------- respuestas de ejemplo
+     Solo se usan si /api/preguntar no responde. Son transcripciones literales
+     de la ejecución real de probar.py, no texto inventado para la maqueta. */
+
+  const DEMO = {
+"¿Qué se hace en la revisión de los 6 meses?":
+`En la **5ª revisión (6 meses)** se realizan las siguientes actividades [5ª revisión del niño sano: 6 meses, p.1-2]:
+
+### Evaluación de los cuidados familiares
+* Tipo de alimentación. Introducción de alimentación complementaria.
+* Hábitos de sueño (especialmente posición para dormir, prevención SMSL).
+* Hábitos tóxicos: tabaco, otros (anotar en HC).
+* Habilidad de los progenitores para el cuidado del menor.
+* Valoración de la relación y del apego.
+* Incorporación de la madre al trabajo: adaptación familiar, guardería.
+
+### Desarrollo físico y psicomotor. Cribados
+* **Crecimiento físico:** peso, talla y perímetro craneal (registrar y vigilar cambio de percentiles) [5ª revisión del niño sano: 6 meses, p.1].
+* **Exploración física completa.**
+* **Valoración del desarrollo psicomotor:** si fuera preciso, utilizar escalas (Haizea-Llevant).
+
+### Inmunizaciones
+* Comprobar vacunación y vacunas del 6º mes según calendario vigente [5ª revisión del niño sano: 6 meses, p.2].
+
+---
+**Fichas consultadas**
+- 5ª revisión del niño sano: 6 meses — actividades completas de la visita · ed. 2014-2018 (versión original del programa) · \`psiaa_visitas_individuales_05revision.pdf\`
+- Tabla de contenidos: qué actividad del programa corresponde a cada visita (tema × edad) · ed. 2014-2018 (versión original del programa) · \`psiaa_visitas_individuales_actividades.pdf\``,
+
+"¿A qué edades son las revisiones?":
+`Según el [Cronograma de las visitas individuales, p.1]:
+
+| Visita | Tipo | Profesional |
+| :--- | :--- | :--- |
+| Prenatal | GRUPAL (educación maternal) | M + P + E |
+| Primera semana | INDIVIDUAL | M o E |
+| Entre 15 días y el mes de vida | INDIVIDUAL | E + P |
+| 2 meses | INDIVIDUAL | E |
+| 4 meses | INDIVIDUAL | E + P |
+| 6 meses | INDIVIDUAL | E |
+| 12 meses | INDIVIDUAL | E + P |
+| 15 meses | INDIVIDUAL | E |
+| 2 años | INDIVIDUAL | E + P |
+| 3-4 años | INDIVIDUAL | E + P |
+| 6 años | INDIVIDUAL | E + P |
+| 9-11 años | INDIVIDUAL | E + P |
+| 12-14 años | INDIVIDUAL | E + P |
+
+**Abreviaturas:** **M** matrona · **P** pediatra · **E** enfermera.
+
+---
+**Fichas consultadas**
+- Cronograma de las visitas individuales: edad de cada revisión y profesional que la realiza · ed. 2014-2018 (versión original del programa) · \`psiaa_visitas_individuales_cronograma.pdf\``,
+
+"¿Cuándo se criba la displasia de cadera?":
+`La información varía según la ficha consultada, y conviene tener presentes las dos:
+
+### Según la tabla de actividades (edición 2014-2018)
+* **Universal:** se realiza en las visitas de **15 días-1 mes, 2 meses, 4 meses, 6 meses, 12 meses, 15 meses y 2 años** [Tabla de contenidos: qué actividad corresponde a cada visita, p.1].
+
+### Según la ficha específica de cribado (edición 03/2025)
+* **Periodicidad general:** en **todos los controles de salud** hasta que el menor pueda caminar de forma independiente, completa y estable, así como en consultas a demanda específicas [Cribado de la displasia evolutiva de cadera, p.2].
+* **Población de riesgo** (presencia de dos factores de riesgo): ecografía alrededor de las **6 semanas de vida** [Cribado de la displasia evolutiva de cadera, p.2].
+
+**Discrepancia:** la tabla de 2014-2018 delimita el cribado a siete visitas que terminan a los 2 años, mientras que la ficha vigente de 03/2025 lo liga al hito del desarrollo (caminar de forma estable) en vez de a una edad fija.
+
+---
+**Fichas consultadas**
+- Cribado de la displasia evolutiva de cadera · ed. 03/2025 · \`CribadoDisplasiaCaderas_marz2025.pdf\`
+- Tabla de contenidos: qué actividad del programa corresponde a cada visita (tema × edad) · ed. 2014-2018 (versión original del programa) · \`psiaa_visitas_individuales_actividades.pdf\``,
+
+"Dosis de vitamina D para el raquitismo":
+`La pauta depende de la edad, el tipo de lactancia y los factores de riesgo [Prevención del raquitismo, p.2-3]:
+
+**Ingesta general recomendada**
+* **Lactantes:** 400 UI/día (10 microgramos), comenzando poco después del nacimiento.
+* **De 1 a 18 años:** 600 UI/día (15 microgramos).
+
+**Suplementación por grupos**
+* **Menores de un año con lactancia materna exclusiva:**
+  * Dosis: 400 UI/día, iniciando en los primeros días de vida.
+  * Duración: se mantendrá **hasta el año de vida**.
+  * Alternativa materna: suplementar a la madre lactante con 4000-6400 UI/día.
+* **Menores de un año con lactancia artificial:** 400 UI/día si ingieren menos de 800-1000 ml diarios de fórmula enriquecida en vitamina D.
+
+---
+**Fichas consultadas**
+- Prevención del raquitismo · ed. 03/2025 · \`PrevencionRaquitismo_Mar25.pdf\``,
+
+"Consejos para entregar a los 2 años":
+`El documento destinado a entregarse a las familias en esta etapa es la **«Guía anticipatoria y consejos para entregar: 2 años»** [Guía anticipatoria y consejos: 2 años, p.1-13]. Es **material divulgativo de entrega**, no un protocolo de actuación profesional.
+
+* **Alimentación y hábitos:** inapetencia fisiológica, promoción de dieta variada, horarios, evitar usar la comida como recompensa, moderación de pantallas [Guía anticipatoria y consejos: 2 años, p.1].
+* **Desarrollo y estimulación:** capacidades esperadas a los 2 años, manejo de rabietas, uso del «NO» y establecimiento de límites [Guía anticipatoria y consejos: 2 años, p.2].
+* **Cuidados e higiene:** higiene de manos, baño diario, lavado dental repasando molares, tabaquismo pasivo y fotoprotección. Se especifica **no** realizar maniobras de retracción del prepucio por fimosis fisiológica [Guía anticipatoria y consejos: 2 años, p.3].
+
+---
+**Fichas consultadas**
+- Guía anticipatoria y consejos para entregar: 2 años · ed. 10/2015 · \`consejos_2_anos_oct15.pdf\`
+- 8ª revisión del niño sano: 2 años — actividades completas de la visita · ed. 2014-2018 (versión original del programa) · \`psiaa_visitas_individuales_08revision.pdf\``,
+
+"Una dinámica para trabajar los límites en grupo":
+`Para trabajar el establecimiento de límites y normas, el programa contempla la **Actividad 3: «Estableciendo normas»** dentro de la Sesión grupal 4 [Sesión grupal 4: «El arte de educar», p.24-28].
+
+La dinámica se plantea con una duración de 20-25 minutos y tres pasos:
+
+1. **Exposición de vídeo y trabajo en pequeños grupos (7 minutos).** Se proyectan dos escenas, o se leen dos viñetas del anexo 3, sobre el establecimiento de límites usando el ejemplo de la recogida de juguetes:
+   * *Escena 1 (razonar y dialogar):* el padre propone un margen de 5 minutos, razona el sentido de recoger y plantea una carrera compartida [Sesión grupal 4: «El arte de educar», p.26].
+   * *Escena 2 (imponer):* el padre exige la recogida con gritos e interrumpe abruptamente el juego [Sesión grupal 4: «El arte de educar», p.26].
+2. **Análisis en grupo.** Los participantes responden por escrito a dos preguntas: ¿cuáles son las normas establecidas y cómo se han planteado?
+3. **Puesta en común** dirigida por quien coordina.
+
+> Los anexos de esta sesión son transparencias y fichas de trabajo. Conviene abrir el PDF original: su maquetación no se puede reproducir aquí.
+
+---
+**Fichas consultadas**
+- Sesión grupal 4: «El arte de educar» (guion completo con actividades, anexos y transparencias) · ed. 2014-2018 (versión original del programa) · \`sesion_grupal_04_arte_educar.pdf\`
+- Guía temática «El arte de educar» · ed. 2014-2018 (versión original del programa) · \`cuidadores_arte_de_educar.pdf\``,
+  };
+
+  entrada.focus();
+})();
+</script>

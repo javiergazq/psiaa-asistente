@@ -1,0 +1,5 @@
+# Dependencias de la FUNCIÓN de Vercel. Solo lo que necesita api/preguntar.py.
+# Gradio y pypdf NO van aquí: solo se usan en local y meterían ~60 MB inútiles
+# en el bundle, encareciendo cada arranque en frío.
+# Probado con google-genai 2.19.
+google-genai>=2.0,<3

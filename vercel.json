@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/preguntar.py": {
+      "maxDuration": 180,
+      "includeFiles": "psiaa/**"
+    }
+  },
+  "headers": [
+    {
+      "source": "/",
+      "headers": [
+        { "key": "content-type", "value": "text/html; charset=utf-8" }
+      ]
+    }
+  ]
+}
