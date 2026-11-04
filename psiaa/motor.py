@@ -209,10 +209,25 @@ def anunciados() -> list[str]:
 
 _verificados: dict[str, bool] = {}
 
+# Sondear al arrancar está bien en local (confirma que la clave y el modelo
+# funcionan antes de preguntar nada) y es un ERROR en serverless: no hay proceso
+# persistente, así que las sondas se repiten en cada arranque en frío y se comen
+# la cuota de 5 peticiones/minuto antes de atender a nadie.
+#
+# Por eso el valor por defecto es NO sondear: se coge el primer modelo de la
+# lista y, si no sirve, con_pool() lo descubre en la primera petición real y pasa
+# al siguiente. Cuesta 0 peticiones de arranque y se autocorrige igual.
+#
+# En local, SONDEAR=1 recupera el diagnóstico temprano.
+SONDEAR = os.environ.get("SONDEAR") == "1"
+
 
 def resolver_modelo(preferidos: list[str], evitar: str | None = None) -> str | None:
-    candidatos = [n for n in preferidos + anunciados() if n != evitar]
-    for nombre in dict.fromkeys(candidatos):
+    candidatos = [n for n in preferidos if n != evitar]
+    if not SONDEAR:
+        return candidatos[0] if candidatos else None
+
+    for nombre in dict.fromkeys(candidatos + [n for n in anunciados() if n != evitar]):
         if nombre not in _verificados:
             _verificados[nombre] = usable(nombre)
         if _verificados[nombre]:
@@ -286,6 +301,12 @@ def resolver_pensamiento():
             )
         return PENSAMIENTOS[fijado]
 
+    if not SONDEAR:
+        # Sin sondear: se asume el control de Gemini 3.x, que es el vigente. Si
+        # resultara equivocado, enrutar() lo corrige en la primera petición real
+        # y lo recuerda. Coste de arranque: 0 peticiones.
+        return PENSAMIENTOS["low"]
+
     opciones = [
         ("thinking_level='low'", types.ThinkingConfig(thinking_level="low")),
         ("thinking_budget=0", types.ThinkingConfig(thinking_budget=0)),
@@ -314,8 +335,32 @@ def resolver_pensamiento():
     )
 
 
-_etiqueta, PENSAMIENTO_MINIMO = resolver_pensamiento()
+_etiqueta, _cfg = resolver_pensamiento()
+
+# En lista de un elemento para poder corregirlo desde enrutar() sin `global`.
+_PENSAMIENTO = [_cfg]
+_ORDEN_DEGRADACION = ["low", "budget0", "none"]
 print(f"[info] pensamiento del enrutador: {_etiqueta}")
+
+
+def _degradar_pensamiento(e: Exception) -> bool:
+    """Si el error viene del thinking_config, pasa a la siguiente opción.
+
+    Devuelve True si ha cambiado algo y merece la pena reintentar.
+    """
+    texto = str(e)
+    if "thinking" not in texto.lower() or "INVALID_ARGUMENT" not in texto:
+        return False
+    actual = next((k for k in _ORDEN_DEGRADACION
+                   if PENSAMIENTOS[k][1] is _PENSAMIENTO[0]), None)
+    siguiente = _ORDEN_DEGRADACION[_ORDEN_DEGRADACION.index(actual) + 1] \
+        if actual and actual != _ORDEN_DEGRADACION[-1] else None
+    if not siguiente:
+        return False
+    etiqueta, cfg = PENSAMIENTOS[siguiente]
+    print(f"[info] thinking rechazado; se pasa a {etiqueta}", flush=True)
+    _PENSAMIENTO[0] = cfg
+    return True
 
 CORPUS = json.loads((AQUI / "corpus.json").read_text(encoding="utf-8"))
 POR_ID = {d["id"]: d for d in CORPUS}
@@ -401,17 +446,30 @@ def enrutar(pregunta: str, historial: list[dict]) -> tuple[str, list[str]]:
             f"{m['role']}: {m['content'][:400]}" for m in ultimos
         ) + "\n\n"
 
-    respuesta = con_pool(POOL_ROUTER, lambda m: cliente.models.generate_content(
-        model=m,
-        contents=f"{contexto}MENSAJE DEL USUARIO\n{pregunta}",
-        config=types.GenerateContentConfig(
-            system_instruction=ENRUTADOR,
-            temperature=0,
-            response_mime_type="application/json",
-            response_schema=ESQUEMA_ENRUTADOR,
-            thinking_config=PENSAMIENTO_MINIMO,
-        ),
-    ))
+    def llamar(modelo):
+        return cliente.models.generate_content(
+            model=modelo,
+            contents=f"{contexto}MENSAJE DEL USUARIO\n{pregunta}",
+            config=types.GenerateContentConfig(
+                system_instruction=ENRUTADOR,
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema=ESQUEMA_ENRUTADOR,
+                thinking_config=_PENSAMIENTO[0],
+            ),
+        )
+
+    try:
+        respuesta = con_pool(POOL_ROUTER, llamar)
+    except Exception as e:
+        # El control de "thinking" cambió de forma incompatible entre Gemini 2.x
+        # (thinking_budget entero) y 3.x (thinking_level textual). Si el valor
+        # asumido no vale, se corrige aquí y se RECUERDA, en vez de gastar una
+        # sonda en cada arranque en frío para averiguarlo.
+        if not _degradar_pensamiento(e):
+            raise
+        respuesta = con_pool(POOL_ROUTER, llamar)
+
     datos = json.loads(respuesta.text)
     ids = [i for i in datos.get("ids", []) if i in POR_ID][:MAX_FUENTES]
     return datos.get("tipo", "consulta"), ids
@@ -575,24 +633,70 @@ def responder(mensaje: str, historial: list[dict]):
     ]
     conversacion.append({"role": "user", "parts": [{"text": contenido}]})
 
+    # Un 503 puede llegar con el flujo YA ABIERTO, a mitad de la respuesta. No
+    # existe forma de retomar la generación donde se quedó, así que lo que se
+    # hace es DESCARTAR lo emitido y rehacer la respuesta con el siguiente modelo
+    # del pool. Es más lento, pero una lista de actuaciones clínicas cortada por
+    # la mitad se lee como completa, y eso es mucho peor que esperar.
+    #
+    # Por eso este bucle no usa con_pool(): hay que distinguir el fallo al abrir
+    # el flujo (reintento transparente) del fallo a mitad (hay que avisar al
+    # consumidor de que descarte lo ya pintado).
+    vivos = [m for m in POOL_RESPUESTA if m not in _retirados] or POOL_RESPUESTA
     texto = ""
-    try:
-        # El 429 salta al abrir el flujo, antes de llegar ningún token, así que
-        # reintentar la apertura es seguro: no se duplica texto ya emitido.
-        flujo = con_pool(POOL_RESPUESTA, lambda m: cliente.models.generate_content_stream(
-            model=m,
-            contents=conversacion,
-            config=types.GenerateContentConfig(
-                system_instruction=RESPONDEDOR,
-                temperature=0,
-            ),
-        ))
-        for trozo in flujo:
-            if trozo.text:
-                texto += trozo.text
-                yield texto
-    except Exception as e:
-        yield ((texto + "\n\n" if texto else "") + aviso_error(e))
+    fallo = None
+
+    for n, modelo in enumerate(vivos):
+        es_ultimo = n == len(vivos) - 1
+        texto = ""
+        try:
+            flujo = cliente.models.generate_content_stream(
+                model=modelo,
+                contents=conversacion,
+                config=types.GenerateContentConfig(
+                    system_instruction=RESPONDEDOR,
+                    temperature=0,
+                ),
+            )
+            for trozo in flujo:
+                if trozo.text:
+                    texto += trozo.text
+                    yield texto
+            fallo = None
+            break
+        except Exception as e:
+            fallo = e
+            aviso = str(e)
+            if "NOT_FOUND" in aviso or "404" in aviso:
+                _retirados.add(modelo)
+            recuperable = (espera_sugerida(e) is not None
+                           or "503" in aviso or "UNAVAILABLE" in aviso)
+            if es_ultimo or not recuperable:
+                break
+            if texto:
+                print(f"[pool] {modelo} se cortó tras {len(texto)} caracteres; "
+                      f"se rehace la respuesta con el siguiente modelo", flush=True)
+                texto = ""
+                yield ""        # cadena vacía = señal de reinicio al consumidor
+            else:
+                print(f"[pool] {modelo} no pudo abrir el flujo, probando el siguiente",
+                      flush=True)
+            espera = espera_sugerida(e)
+            if espera:
+                time.sleep(min(espera, 30))
+
+    if fallo is not None:
+        if texto:
+            # El aviso va DELANTE, no al pie: si se queda abajo, la respuesta
+            # truncada se lee como si estuviera entera.
+            yield (
+                "⚠️ **Respuesta incompleta.** Se cortó a mitad y no he conseguido "
+                "rehacerla, así que falta contenido. No la uses como si estuviera "
+                f"completa: vuelve a preguntar.\n\n{aviso_error(fallo)}\n\n---\n\n"
+                f"{texto}"
+            )
+        else:
+            yield aviso_error(fallo)
         return
 
     pie = "\n".join(

@@ -866,6 +866,13 @@
           let carga;
           try { carga = JSON.parse(datos); } catch { continue; }
           if (evento === "delta") { acumulado += carga.t; pintar(); }
+          else if (evento === "reinicio") {
+            // El servidor ha rehecho la respuesta desde cero (se cortó a mitad
+            // y la reintentó con otro modelo). Se descarta lo pintado para no
+            // acabar con las dos versiones pegadas.
+            acumulado = "";
+            cuerpo.innerHTML = "";
+          }
           else if (evento === "error") {
             acumulado += (acumulado ? "\n\n" : "") + carga.t;
             pintar();

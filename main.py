@@ -97,16 +97,24 @@ async def preguntar(scope, receive, send):
         await emitir(sse("error", {"t": "No has escrito ninguna pregunta."}))
     else:
         # motor.responder() entrega el texto ACUMULADO (es lo que espera Gradio).
-        # Aquí se manda solo lo nuevo para no reenviar la respuesta entera en
+        # Aquí se manda solo lo nuevo, para no reenviar la respuesta entera en
         # cada trozo.
+        #
+        # Si el acumulado deja de ser una extensión de lo ya enviado, el motor ha
+        # rehecho la respuesta desde cero (un 503 a mitad obliga a descartar y
+        # reintentar con otro modelo). En ese caso hay que decirle al cliente que
+        # tire lo pintado, o acabaría con las dos versiones pegadas.
         enviado = ""
         try:
             for acumulado in motor.responder(mensaje, historial):
-                nuevo = (acumulado[len(enviado):] if acumulado.startswith(enviado)
-                         else "\n\n" + acumulado)
+                if acumulado.startswith(enviado):
+                    nuevo = acumulado[len(enviado):]
+                else:
+                    await emitir(sse("reinicio", {}))
+                    enviado, nuevo = "", acumulado
                 if nuevo:
                     await emitir(sse("delta", {"t": nuevo}))
-                    enviado = acumulado
+                enviado = acumulado
         except Exception as e:                   # nunca debería llegar aquí
             await emitir(sse("error", {"t": motor.aviso_error(e)}))
 
