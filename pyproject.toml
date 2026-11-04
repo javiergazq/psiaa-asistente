@@ -1,0 +1,13 @@
+[project]
+name = "psiaa-asistente"
+version = "1.0.0"
+description = "Asistente documental del Programa de Salud Infantil y Adolescente de Andalucia"
+requires-python = ">=3.12"
+# Solo lo que necesita main.py en ejecucion. Gradio y pypdf son de uso local y
+# meterlos aqui anadiria ~60 MB al bundle sin que la funcion los use nunca.
+dependencies = ["google-genai>=2.0,<3"]
+
+# Declara el entrypoint de forma explicita. Sin esto, Vercel escanea nombres por
+# defecto y fallo con PYTHON_ENTRYPOINT_NOT_FOUND al tener la funcion en api/.
+[tool.vercel]
+entrypoint = "main:app"
