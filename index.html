@@ -119,27 +119,6 @@
   .logo i {
     font-style: normal;
     color: var(--accent);
-    position: relative;
-  }
-
-  /* El subrayado del acento se dibuja, no se hereda: así puede crecer en la
-     entrada sin arrastrar el resto del texto. */
-  .logo i::after {
-    content: "";
-    position: absolute;
-    left: -.02em;
-    right: -.02em;
-    bottom: .04em;
-    height: .09em;
-    background: var(--accent);
-    border-radius: 2px;
-    transform-origin: left center;
-    animation: trazo .5s .35s cubic-bezier(.2, .8, .2, 1) both;
-  }
-
-  @keyframes trazo {
-    from { transform: scaleX(0); }
-    to   { transform: scaleX(1); }
   }
 
   /* ---------------------------------------------------------------- inicio */
@@ -201,6 +180,22 @@
     transform: translateY(-1px);
   }
 
+  /* Firma. Va al final de la portada y no en la conversación: la autoría es
+     parte de la identidad de la página, no del hilo. */
+  .firma {
+    margin: .4rem 0 0;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+    width: min(100%, 22rem);
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--ink-faint);
+    text-align: center;
+  }
+
+  .firma b { font-weight: 550; color: var(--ink-soft); }
+  .firma span { display: block; }
+
   .aclaracion {
     font-size: .8rem;
     line-height: 1.55;
@@ -232,8 +227,6 @@
   }
 
   .barra .logo { font-size: 1.35rem; }
-
-  .barra .logo i::after { animation: none; }
 
   .reiniciar {
     font: inherit;
@@ -601,14 +594,12 @@
     </p>
   </div>
 
-  <div class="sugerencias" id="sugerencias">
-    <button class="sugerencia">¿Qué se hace en la revisión de los 6 meses?</button>
-    <button class="sugerencia">¿A qué edades son las revisiones?</button>
-    <button class="sugerencia">Dosis de vitamina D para el raquitismo</button>
-    <button class="sugerencia">¿Cuándo se criba la displasia de cadera?</button>
-    <button class="sugerencia">Consejos para entregar a los 2 años</button>
-    <button class="sugerencia">Una dinámica para trabajar los límites en grupo</button>
-  </div>
+  <div class="sugerencias" id="sugerencias"></div>
+
+  <p class="firma">
+    <b>Javier Gázquez García</b>
+    <span>Enfermero · Distrito Sanitario Almería</span>
+  </p>
 </section>
 
 <div id="pie-compositor"></div>
@@ -883,6 +874,7 @@
       historial.push({ role: "assistant", content: acumulado });
     } catch (e) {
       document.body.classList.add("es-demo");
+      pintarSugerencias(true);
       const grabada = DEMO[texto.trim()];
       if (grabada) {
         acumulado = grabada;
@@ -930,12 +922,75 @@
     hilo.innerHTML = "";
     historial = [];
     document.body.classList.remove("conversando");
-    portada.insertBefore(zona, document.getElementById("sugerencias"));
+    portada.insertBefore(zona, cajon);
+    pintarSugerencias(document.body.classList.contains("es-demo"));
     legal.textContent =
       "Responde con el programa en la mano y te dice de qué ficha y página sale " +
       "cada dato. No sustituye al criterio profesional ni al texto oficial.";
     entrada.focus();
   });
+
+
+  /* --------------------------------------------------------- sugerencias
+     Banco de preguntas y sorteo en cada carga. Dos motivos: enseña la
+     amplitud real del programa (visitas, cribados, material de entrega,
+     trabajo en grupo, grupos específicos), que con seis fijas no se intuye;
+     y quien vuelve descubre cosas que no sabía que podía preguntar.
+
+     `demo` marca las que tienen respuesta grabada. Fuera de Vercel no hay
+     servidor, así que al detectar modo demostración se reordenan para dejar
+     esas delante y la maqueta siga siendo navegable. */
+
+  const BANCO = [
+    { q: "¿Qué se hace en la revisión de los 6 meses?", demo: true },
+    { q: "¿A qué edades son las revisiones?", demo: true },
+    { q: "¿Cuándo se criba la displasia de cadera?", demo: true },
+    { q: "Dosis de vitamina D para el raquitismo", demo: true },
+    { q: "Consejos para entregar a los 2 años", demo: true },
+    { q: "Una dinámica para trabajar los límites en grupo", demo: true },
+    { q: "¿Qué toca en la visita de los 15 meses?" },
+    { q: "¿Qué se revisa en la primera semana de vida?" },
+    { q: "¿Qué profesional hace cada revisión?" },
+    { q: "¿Qué recomiendo sobre colecho?" },
+    { q: "¿Cuándo se introduce la alimentación complementaria?" },
+    { q: "¿Cómo prevengo la muerte súbita del lactante?" },
+    { q: "¿Cuándo se deriva una criptorquidia?" },
+    { q: "Signos de alarma del desarrollo psicomotor a los 12 meses" },
+    { q: "¿Con qué escala se criba la depresión posparto?" },
+    { q: "¿A quién se le hace el Mantoux?" },
+    { q: "¿Cómo se criba la hipoacusia infantil?" },
+    { q: "Consejos de fotoprotección en lactantes" },
+    { q: "¿Qué digo a los padres sobre el uso de pantallas?" },
+    { q: "¿Qué material se entrega a un adolescente de 12 a 14 años?" },
+    { q: "¿Cómo evalúo las competencias parentales a los 4 años?" },
+    { q: "¿Qué sesiones grupales propone el programa?" },
+    { q: "Seguimiento de un prematuro de menos de 32 semanas" },
+    { q: "¿Qué cribados añado en un niño con síndrome de Down?" },
+    { q: "¿Qué hago al llegar un menor de adopción internacional?" },
+    { q: "¿Qué pauta de flúor recomiendo?" },
+  ];
+
+  const CUANTAS = 6;
+  const cajon = document.getElementById("sugerencias");
+
+  function pintarSugerencias(soloDemo = false) {
+    const fuente = soloDemo ? BANCO.filter((x) => x.demo) : BANCO;
+    const baraja = fuente.slice();
+    for (let i = baraja.length - 1; i > 0; i--) {          // Fisher-Yates
+      const j = Math.floor(Math.random() * (i + 1));
+      [baraja[i], baraja[j]] = [baraja[j], baraja[i]];
+    }
+    cajon.innerHTML = "";
+    for (const { q } of baraja.slice(0, CUANTAS)) {
+      const b = document.createElement("button");
+      b.className = "sugerencia";
+      b.type = "button";
+      b.textContent = q;
+      cajon.appendChild(b);
+    }
+  }
+
+  pintarSugerencias();
 
   /* ------------------------------------------------- respuestas de ejemplo
      Solo se usan si /api/preguntar no responde. Son transcripciones literales
