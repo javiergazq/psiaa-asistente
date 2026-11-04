@@ -471,7 +471,14 @@ def enrutar(pregunta: str, historial: list[dict]) -> tuple[str, list[str]]:
         respuesta = con_pool(POOL_ROUTER, llamar)
 
     datos = json.loads(respuesta.text)
-    ids = [i for i in datos.get("ids", []) if i in POR_ID][:MAX_FUENTES]
+    # dict.fromkeys deduplica conservando el orden, y va ANTES del recorte: si el
+    # modelo repite una ficha (lo hace cuando la considera relevante por dos
+    # motivos distintos), sin deduplicar se inyectaba el mismo texto dos veces
+    # —el doble de contexto pagado por nada— y aparecía repetida en el pie de
+    # fuentes. Deduplicando primero, los 4 huecos son 4 fichas DISTINTAS.
+    ids = list(dict.fromkeys(
+        i for i in datos.get("ids", []) if i in POR_ID
+    ))[:MAX_FUENTES]
     return datos.get("tipo", "consulta"), ids
 
 
@@ -532,7 +539,7 @@ def construir_contexto(ids: list[str]) -> tuple[str, list[str]]:
     omitir una fuente sin que nadie se entere.
     """
     bloques, usados, fuera, total = [], [], [], 0
-    for ident in ids:
+    for ident in dict.fromkeys(ids):      # red de seguridad: nunca inyectar dos veces lo mismo
         d = POR_ID[ident]
         trozo = (
             f"<<< FICHA: {d['titulo']}\n"
